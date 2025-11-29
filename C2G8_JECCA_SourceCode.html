@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CitySense V14 | Detailed Stops</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-bg: rgba(20, 25, 40, 0.95);
+            --primary: #00f2ff;
+            --success: #00ff9d;
+            --warning: #ffb800;
+            --danger: #ff0055;
+            --text-main: #ffffff;
+            --text-muted: #8b9bb4;
+            --glass: blur(12px);
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        .bg-grid {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background-image: 
+                linear-gradient(rgba(0, 242, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 242, 255, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+            z-index: -1;
+        }
+
+        .app-container {
+            max-width: 480px;
+            margin: 0 auto; background: rgba(11, 15, 25, 0.95);
+            min-height: 100vh; border-left: 1px solid rgba(255,255,255,0.05);
+            border-right: 1px solid rgba(255,255,255,0.05); position: relative;
+            padding-bottom: 80px;
+        }
+
+        /* HEADER */
+        header {
+            padding: 15px 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(11, 15, 25, 0.9);
+            backdrop-filter: var(--glass); position: sticky;
+            top: 0; z-index: 100;
+        }
+        .brand { font-size: 16px; font-weight: 800; letter-spacing: 1px;
+            display: flex; align-items: center; gap: 10px; }
+        .pulse-dot { width: 8px; height: 8px;
+            background: var(--success); border-radius: 50%; box-shadow: 0 0 10px var(--success); animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0% {opacity: 1;} 50% {opacity: 0.4;} 100% {opacity: 1;} }
+
+        /* DASHBOARD */
+        .dashboard-sticky {
+            position: sticky;
+            top: 55px; z-index: 90; background: var(--bg-color);
+            padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .dashboard-title { font-size: 10px; color: var(--primary); letter-spacing: 1px; margin-bottom: 8px; text-transform: uppercase;
+            display:flex; justify-content:space-between; align-items: center;}
+        
+        .live-indicator { font-size: 9px;
+            background: rgba(0, 255, 157, 0.1); color: var(--success); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--success); display: none;
+        }
+        .live-indicator.active { display: inline-block; animation: blink 1s infinite;
+        }
+
+        .sensor-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+        }
+        .sensor-card { 
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1); 
+            border-radius: 8px; padding: 10px 5px; text-align: center; transition: all 0.3s;
+        }
+        .sensor-val { font-size: 14px; font-weight: bold; display: block; margin-bottom: 4px; color: white;
+            font-family: monospace; }
+        .sensor-label { font-size: 9px; color: var(--text-muted); text-transform: uppercase;
+        }
+        
+        .sensor-card.alert { border-color: var(--danger); background: rgba(255, 0, 85, 0.2); animation: flashRed 2s infinite; }
+        .sensor-card.alert .sensor-val { color: var(--danger); }
+        .sensor-card.warning { border-color: var(--warning); color: var(--warning); }
+        @keyframes flashRed {
+            0% { box-shadow: 0 0 0 rgba(255,0,85,0); } 50% { box-shadow: 0 0 15px rgba(255,0,85,0.3); } 100% { box-shadow: 0 0 0 rgba(255,0,85,0); }
+        }
+
+        /* INPUTS */
+        .input-box { margin: 20px;
+            padding: 15px; background: rgba(255,255,255,0.03); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);
+        }
+        select { width: 100%; background: #000; color: white; border: 1px solid #333;
+            padding: 10px; border-radius: 6px; margin-bottom: 10px; outline: none; }
+        button.scan-btn { width: 100%;
+            background: linear-gradient(90deg, var(--primary), #0088cc); border: none; padding: 12px; border-radius: 6px; color: #000; font-weight: 800; cursor: pointer; text-transform: uppercase;
+        }
+
+        /* NEARBY STOPS */
+        .nearby-stops-container {
+            margin: 0 20px 20px;
+            display: none; 
+            animation: fadeIn 0.5s ease;
+        }
+        .section-header { 
+            font-size: 11px;
+            color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; 
+            margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; 
+            display: flex; justify-content: space-between;
+        }
+        .stop-item {
+            background: rgba(0, 242, 255, 0.05);
+            border-left: 3px solid var(--primary);
+            padding: 10px 12px; margin-bottom: 8px; border-radius: 0 6px 6px 0;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .stop-info h4 { margin: 0; font-size: 13px; color: white; font-weight: 600;
+        }
+        .stop-info span { font-size: 10px; color: #aaa;
+        }
+        .walk-time { 
+            text-align: right;
+            font-size: 12px; font-weight: bold; color: var(--success); 
+            background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px;
+        }
+
+        /* RESULTS */
+        .results-container { padding: 0 20px 20px;
+        }
+        .route-card {
+            background: rgba(255,255,255,0.03);
+            border-radius: 12px; padding: 15px; margin-bottom: 15px;
+            border: 1px solid rgba(255,255,255,0.05); position: relative; overflow: hidden; 
+            cursor: pointer; transition: all 0.2s;
+        }
+        .route-card:hover { transform: translateY(-2px); border-color: var(--primary);
+        }
+        .route-card.selected { border: 2px solid var(--primary); background: rgba(0, 242, 255, 0.05);
+        }
+        .route-card.critical { border: 1px solid var(--danger);
+        }
+        .route-card.critical.selected { border: 2px solid var(--danger); background: rgba(255, 0, 85, 0.1);
+        }
+
+        .route-header { display:flex; justify-content:space-between; align-items:start;
+        }
+        .route-mode { font-size: 16px; margin:0; color: white;
+        }
+        
+        .route-metrics { display:flex; gap: 15px; margin: 5px 0; align-items: baseline; }
+        .route-time { font-size: 13px; font-weight:bold; color: var(--primary); }
+        .route-price { font-size: 13px; font-weight:bold; color: var(--warning); }
+        .route-eta { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+
+        .score-badge {
+            font-size: 10px;
+            font-weight: bold; padding: 3px 8px; border-radius: 10px;
+            border: 1px solid;
+        }
+        .score-high { color: var(--success); border-color: var(--success); background: rgba(0, 255, 157, 0.1);
+        }
+        .score-med { color: var(--warning); border-color: var(--warning); background: rgba(255, 184, 0, 0.1);
+        }
+        .score-low { color: var(--danger); border-color: var(--danger); background: rgba(255, 0, 85, 0.1);
+        }
+
+        /* NEW STOP DETAILS SECTION */
+        .stop-details {
+            margin-top: 10px; padding: 10px;
+            background: rgba(255,255,255,0.05); border-radius: 6px;
+            font-size: 11px; color: #ddd;
+        }
+        .stop-row { display: flex; gap: 10px; margin-bottom: 4px; }
+        .stop-icon { width: 15px; text-align: center; font-size: 10px; }
+        .stop-name { font-weight: 600; color: white; }
+
+        .ai-analysis {
+            background: rgba(0,0,0,0.3);
+            padding: 8px; font-size: 10px; color: #ccc; 
+            margin-top: 10px; border-radius: 4px; line-height: 1.4; border-left: 2px solid #555;
+        }
+        .ai-analysis.warning { border-left-color: var(--danger); color: #ffaaaa; background: rgba(255,0,85,0.1); }
+
+        .tag-row { display: flex; gap: 5px; margin-top: 5px;
+        }
+        .mini-tag { font-size: 9px; padding: 2px 6px; border-radius: 3px; background: rgba(255,255,255,0.1);
+            color: #aaa; }
+        
+        .bus-badge { font-size: 9px; padding: 2px 4px; border-radius: 3px; margin-right: 5px; border: 1px solid rgba(255,255,255,0.2); }
+        .bus-rapid { color: #ff0055; background: rgba(255, 0, 85, 0.1); }
+        .bus-gokl { color: #d600d6; background: rgba(214, 0, 214, 0.1); }
+        .bus-selangor { color: #ffb800; background: rgba(255, 184, 0, 0.1); }
+        .bus-feeder { color: #00f2ff; background: rgba(0, 242, 255, 0.1); }
+
+        .dataset-badge {
+            text-align: center;
+            font-size: 9px; color: #555; margin-top: 20px;
+            border-top: 1px solid #222; padding-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bg-grid"></div>
+
+    <div class="app-container">
+        <header>
+            <div class="brand"><div class="pulse-dot"></div>JECCA Traffic Sense</div>
+            <div style="font-size:10px; color:var(--text-muted)">V14 DETAILED</div>
+        </header>
+
+        <div class="dashboard-sticky">
+            <div class="dashboard-title">
+                <span id="target-label">System Idle</span>
+                <span class="live-indicator" id="live-tag">● LIVE FEED</span>
+            </div>
+            <div class="sensor-grid">
+                <div class="sensor-card" id="card-bt">
+                    <span class="sensor-val" id="val-bt">--</span>
+                    <span class="sensor-label">Bluetooth Nodes</span>
+                </div>
+                <div class="sensor-card" id="card-audio">
+                    <span class="sensor-val" id="val-audio">--</span>
+                    <span class="sensor-label">Audio Level</span>
+                </div>
+                <div class="sensor-card" id="card-motion">
+                    <span class="sensor-val" id="val-motion">--</span>
+                    <span class="sensor-label">Motion Speed</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="input-box">
+            <select id="start" onchange="showNearbyStops()">
+                <option value="" disabled selected>Select Origin</option>
+                <option value="UM">Universiti Malaya (UM)</option>
+                <option value="Pavilion BB">Pavilion Bukit Bintang</option>
+                <option value="Suria KLCC">Suria KLCC</option>
+                <option value="TRX">TRX Exchange</option>
+            </select>
+            <select id="destination">
+                <option value="" disabled selected>Select Destination</option>
+                <option value="Suria KLCC">Suria KLCC</option>
+                <option value="TRX">TRX Exchange</option>
+                <option value="Pavilion BB">Pavilion Bukit Bintang</option>
+                <option value="UM">Universiti Malaya (UM)</option>
+            </select>
+            <button class="scan-btn" onclick="analyzeRoute()">Find Optimized Routes</button>
+        </div>
+
+        <div class="nearby-stops-container" id="nearby-container">
+            <div class="section-header">
+                <span>Nearby Bus Hubs</span>
+                <span style="font-size:9px; opacity:0.7">GPS: ACTIVE</span>
+            </div>
+            <div id="nearby-list"></div>
+        </div>
+
+        <div class="results-container" id="results">
+            <div style="text-align:center; padding: 20px; color: var(--text-muted); font-size: 12px;">
+                <strong>Instructions:</strong><br>
+                1. Select Origin & Destination.<br>
+                2. See 3-4 options per trip.<br>
+                3. Check <strong>Board/Alight</strong> details on cards.
+            </div>
+        </div>
+
+        <div class="dataset-badge">
+            Model trained on Kaggle GTFS Traffic Prediction Dataset v2.4<br>
+            © 2024 CitySense Network
+        </div>
+    </div>
+
+    <script>
+        const busStopData = {
+            'UM': [
+                { name: 'Bus Stop KK12 (Kolej Kediaman)', walk: '3 min', dist: '180m' },
+                { name: 'Bus Stop Masjid Ar-Rahman', walk: '11 min', dist: '850m' },
+                { name: 'LRT Universiti Hub', walk: '15 min', dist: '1.2km' }
+            ],
+            'Pavilion BB': [
+                { name: 'Starhill Gallery', walk: '1 min', dist: '50m' },
+                { name: 'MRT Bukit Bintang Gate A', walk: '4 min', dist: '300m' }
+            ],
+            'Suria KLCC': [
+                { name: 'KLCC (Utara)', walk: '2 min', dist: '100m' },
+                { name: 'Ampang Park Hub', walk: '8 min', dist: '600m' }
+            ],
+            'TRX': [
+                { name: 'MRT TRX Pintu B', walk: '5 min', dist: '350m' },
+                { name: 'Imbi Monorail Hub', walk: '15 min', dist: '1.1km' }
+            ]
+        };
+        
+        let sensorInterval = null;
+        let currentRouteSensors = null;
+        let currentRouteList = [];
+
+        function showNearbyStops() {
+            const start = document.getElementById('start').value;
+            const container = document.getElementById('nearby-container');
+            const list = document.getElementById('nearby-list');
+            if (!start || !busStopData[start]) return;
+
+            let html = '';
+            busStopData[start].forEach(stop => {
+                html += `
+                <div class="stop-item">
+                    <div class="stop-info">
+                        <h4>${stop.name}</h4>
+                        <span>${stop.dist} away</span>
+                    </div>
+                    <div class="walk-time">🚶 ${stop.walk}</div>
+                </div>`;
+            });
+            list.innerHTML = html;
+            container.style.display = 'block';
+        }
+
+        function calculateETA(minutes) {
+            if(minutes === "DELAYED") return "UNKNOWN";
+            const now = new Date();
+            now.setMinutes(now.getMinutes() + parseInt(minutes));
+            const hours = now.getHours().toString().padStart(2, '0');
+            const mins = now.getMinutes().toString().padStart(2, '0');
+            return `Arrives ${hours}:${mins}`;
+        }
+
+        function analyzeRoute() {
+            const start = document.getElementById('start').value;
+            const dest = document.getElementById('destination').value;
+            if (!start || !dest || start === dest) { alert("Please select valid Origin and Destination"); return; }
+
+            document.getElementById('results').innerHTML = `<div style="text-align:center; padding:30px; font-size:12px; color:#00f2ff;">Connecting to GTFS Prediction Model...</div>`;
+            
+            setTimeout(() => {
+                const routes = generateRouteData(start, dest);
+                renderRoutes(routes);
+                stopLiveFeed();
+                document.getElementById('target-label').innerText = "Select a route to view Live Feed";
+                document.getElementById('val-bt').innerText = "--";
+                document.getElementById('val-audio').innerText = "--";
+                document.getElementById('val-motion').innerText = "--";
+                document.getElementById('card-motion').classList.remove('alert');
+                document.getElementById('card-bt').classList.remove('warning');
+            }, 800);
+        }
+
+        function generateRouteData(start, dest) {
+            let routes = [];
+
+            // --- SCENARIO 1: UM -> TRX (4 Choices) ---
+            if (start === 'UM' && dest === 'TRX') {
+                // Choice 1: MRT Feeder
+                routes.push({
+                    mode: 'Feeder T815 + MRT',
+                    time: '42 min', price: 'RM 3.80',
+                    desc: 'Best for KK12 residents. Transfer at Phileo Damansara.',
+                    stops: { depart: 'KK12 (Opposite UM)', arrive: 'MRT TRX Pintu A' },
+                    status: 'normal', score: 91, 
+                    ai: 'Bus T815 freq: 15min. Smooth transfer.',
+                    baseSensors: { bt: 65, audio: 68, speed: 45, isPrivate: false, isZero: false } 
+                });
+                // Choice 2: Bus T789 + LRT + MRT
+                routes.push({
+                    mode: 'Bus T789 + LRT/MRT',
+                    time: '55 min', price: 'RM 4.20',
+                    desc: 'Via LRT Universiti. Change trains at Pasar Seni.',
+                    stops: { depart: 'Library / Chancellery', arrive: 'MRT TRX Pintu B' },
+                    status: 'normal', score: 85, 
+                    ai: 'Bus T789 is crowded at this hour.',
+                    baseSensors: { bt: 110, audio: 75, speed: 30, isPrivate: false, isZero: false } 
+                });
+                // Choice 3: Smart Selangor (Free)
+                routes.push({
+                    mode: 'PJ01 (Free) + LRT',
+                    time: '65 min', price: 'RM 2.40',
+                    desc: 'Budget option. Walk to Engineering Fac for bus.',
+                    stops: { depart: 'Fac. Engineering', arrive: 'LRT Taman Jaya' },
+                    status: 'normal', score: 78, 
+                    ai: 'PJ01 moves slowly in PJ traffic.',
+                    baseSensors: { bt: 90, audio: 72, speed: 25, isPrivate: false, isZero: false } 
+                });
+                // Choice 4: Grab
+                routes.push({
+                    mode: 'Ride Hailing (Grab)',
+                    time: '28 min', price: 'RM 22.00',
+                    desc: 'Direct via Kerinchi Link tunnel.',
+                    stops: { depart: 'Your Location', arrive: 'Exchange TRX Lobby' },
+                    status: 'normal', score: 88, 
+                    ai: 'Fastest. Mild tunnel traffic.',
+                    baseSensors: { bt: 5, audio: 40, speed: 60, isPrivate: true, isZero: false } 
+                });
+                return routes;
+            }
+
+            // --- SCENARIO 2: UM -> KLCC (4 Choices) ---
+            if (start === 'UM' && dest === 'Suria KLCC') {
+                // Choice 1: LRT Breakdown
+                routes.push({
+                    mode: 'LRT Kelana Jaya Line',
+                    time: 'SERVICE DISRUPTED', price: 'Refundable',
+                    desc: 'Critical Service Failure detected.',
+                    stops: { depart: 'LRT Universiti', arrive: 'LRT KLCC' },
+                    status: 'critical', score: 12, 
+                    ai: '⚠️ CRITICAL: 185+ devices, 0 km/h velocity. Breakdown.',
+                    baseSensors: { bt: 185, audio: 88, speed: 0, isPrivate: false, isZero: true } 
+                });
+                // Choice 2: Grab (Surge)
+                routes.push({
+                    mode: 'Ride Hailing (Grab)',
+                    time: '35 min', price: 'RM 32.50',
+                    desc: 'Surge Pricing Active due to breakdown.',
+                    stops: { depart: 'Your Location', arrive: 'Suria KLCC Entrance' },
+                    status: 'normal', score: 65, 
+                    ai: 'High demand detected in area.',
+                    baseSensors: { bt: 5, audio: 45, speed: 50, isPrivate: true, isZero: false } 
+                });
+                // Choice 3: Bus to City
+                routes.push({
+                    mode: 'RapidKL Bus 780',
+                    time: '60 min', price: 'RM 1.90',
+                    desc: 'Direct bus to Pasar Seni, then walk/LRT.',
+                    stops: { depart: 'UM Gateway (Gerbang)', arrive: 'Pasar Seni Hub' },
+                    status: 'normal', score: 80, 
+                    ai: 'Bus is moving well on Federal Hwy.',
+                    baseSensors: { bt: 55, audio: 70, speed: 35, isPrivate: false, isZero: false } 
+                });
+                // Choice 4: Multi-Modal
+                routes.push({
+                    mode: 'Bus T789 + MRT Putrajaya',
+                    time: '58 min', price: 'RM 4.50',
+                    desc: 'Transfer at Universiti & Ampang Park.',
+                    stops: { depart: 'KK12', arrive: 'Ampang Park Stn' },
+                    status: 'normal', score: 75, 
+                    ai: 'Multiple transfers required.',
+                    baseSensors: { bt: 80, audio: 65, speed: 40, isPrivate: false, isZero: false } 
+                });
+                return routes;
+            }
+
+            // --- SCENARIO 3: PAVILION <-> KLCC (4 Choices) ---
+            if ((start === 'Pavilion BB' && dest === 'Suria KLCC') || (start === 'Suria KLCC' && dest === 'Pavilion BB')) {
+                // Choice 1: Walkway
+                routes.push({
+                    mode: 'AC Walkway',
+                    time: '12 min', price: 'Free',
+                    desc: 'Connects Pavilion to KLCC Convention Ctr.',
+                    stops: { depart: 'Pavilion Connection', arrive: 'KLCC Aquaria' },
+                    status: 'normal', score: 99, 
+                    ai: 'Weather clear. Best option.',
+                    baseSensors: { bt: 200, audio: 70, speed: 5, isPrivate: false, isZero: false } 
+                });
+                // Choice 2: GoKL Bus
+                routes.push({
+                    mode: 'GoKL Green Line',
+                    time: '25 min', price: 'Free/RM1',
+                    desc: 'Free City Bus loop.',
+                    stops: { depart: 'Pavilion Stop', arrive: 'KLCC Stop' },
+                    status: 'normal', score: 65, 
+                    ai: 'Heavy traffic on Raja Chulan.',
+                    baseSensors: { bt: 60, audio: 75, speed: 10, isPrivate: false, isZero: false } 
+                });
+                // Choice 3: Monorail + Walk
+                routes.push({
+                    mode: 'Monorail Line',
+                    time: '20 min', price: 'RM 2.30',
+                    desc: 'Train to Bukit Nanas, then 5 min walk.',
+                    stops: { depart: 'Bukit Bintang Stn', arrive: 'Bukit Nanas Stn' },
+                    status: 'normal', score: 70, 
+                    ai: 'Station crowded with tourists.',
+                    baseSensors: { bt: 120, audio: 75, speed: 30, isPrivate: false, isZero: false } 
+                });
+                // Choice 4: Grab
+                routes.push({
+                    mode: 'GrabCar Short',
+                    time: '15 min', price: 'RM 11.00',
+                    desc: 'Traffic loops required due to one-way streets.',
+                    stops: { depart: 'Pavilion Entrance', arrive: 'Suria KLCC' },
+                    status: 'normal', score: 50, 
+                    ai: 'Inefficient due to one-way systems.',
+                    baseSensors: { bt: 3, audio: 40, speed: 15, isPrivate: true, isZero: false } 
+                });
+                return routes;
+            }
+
+            // --- GENERIC FALLBACK (3 Choices) ---
+            routes.push({
+                mode: 'LRT/MRT Line',
+                time: '30 min', price: 'RM 3.50',
+                desc: 'Primary Rail Connection.',
+                stops: { depart: start + ' Station', arrive: dest + ' Station' },
+                status: 'normal', score: 90, 
+                ai: 'Operating on schedule.',
+                baseSensors: { bt: 90, audio: 65, speed: 80, isPrivate: false, isZero: false }
+            });
+            routes.push({
+                mode: 'RapidKL Bus',
+                time: '50 min', price: 'RM 1.50',
+                desc: 'Standard City Bus.',
+                stops: { depart: start + ' Bus Hub', arrive: dest + ' Stop' },
+                status: 'normal', score: 70, 
+                ai: 'Moderate traffic.',
+                baseSensors: { bt: 45, audio: 70, speed: 30, isPrivate: false, isZero: false }
+            });
+            routes.push({
+                mode: 'Ride Hailing',
+                time: '35 min', price: 'RM 25.00',
+                desc: 'Door-to-door service.',
+                stops: { depart: 'Your Location', arrive: dest + ' Entrance' },
+                status: 'normal', score: 85, 
+                ai: 'Route clear.',
+                baseSensors: { bt: 4, audio: 40, speed: 55, isPrivate: true, isZero: false }
+            });
+
+            return routes;
+        }
+
+        function renderRoutes(routes) {
+            const container = document.getElementById('results');
+            let html = '';
+            window.currentRouteList = routes;
+
+            routes.forEach((r, idx) => {
+                let isCrit = r.status === 'critical';
+                let scoreClass = r.score < 60 ? 'score-low' : (r.score < 90 ? 'score-med' : 'score-high');
+                let eta = calculateETA(r.time === 'SERVICE DISRUPTED' ? "DELAYED" : parseInt(r.time));
+                let aiClass = isCrit ? 'warning' : '';
+                
+                // New Stop Details Block
+                let stopDetails = `
+                    <div class="stop-details">
+                        <div class="stop-row">
+                            <div class="stop-icon">⬆️</div>
+                            <div>Board: <span class="stop-name">${r.stops.depart}</span></div>
+                        </div>
+                        <div class="stop-row">
+                            <div class="stop-icon">⬇️</div>
+                            <div>Alight: <span class="stop-name">${r.stops.arrive}</span></div>
+                        </div>
+                    </div>
+                `;
+
+                html += `
+                <div class="route-card ${isCrit ? 'critical' : ''}" onclick="selectRoute(${idx}, this)">
+                    <div class="route-header">
+                        <div>
+                            <h3 class="route-mode" style="color:${isCrit ? 'var(--danger)' : 'white'}">${r.mode}</h3>
+                            <div class="route-metrics">
+                                <span class="route-time" style="color:${isCrit ? 'var(--danger)' : 'var(--primary)'}">${r.time}</span>
+                                <span class="route-price">${r.price}</span>
+                                <span class="route-eta">${eta}</span>
+                            </div>
+                        </div>
+                        <div class="score-badge ${scoreClass}">
+                            ${r.score}% Reliable
+                        </div>
+                    </div>
+                    
+                    <div style="font-size:11px; color:#888; margin-top:5px;">${r.desc}</div>
+                    
+                    ${stopDetails}
+
+                    <div class="tag-row">
+                        <span class="mini-tag">${r.baseSensors.isPrivate ? 'Private' : 'Public'}</span>
+                        <span class="mini-tag">GTFS Verified</span>
+                    </div>
+                    <div class="ai-analysis ${aiClass}"><strong>🤖 AI:</strong> ${r.ai}</div>
+                </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function selectRoute(index, card) {
+            document.querySelectorAll('.route-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+            const routeData = window.currentRouteList[index];
+            currentRouteSensors = routeData.baseSensors;
+            
+            document.getElementById('target-label').innerText = "Tracking: " + routeData.mode;
+            document.getElementById('target-label').style.color = routeData.status === 'critical' ? 'var(--danger)' : 'var(--primary)';
+            
+            const motionCard = document.getElementById('card-motion');
+            const btCard = document.getElementById('card-bt');
+            
+            if (currentRouteSensors.isZero) motionCard.classList.add('alert');
+            else motionCard.classList.remove('alert');
+
+            if (currentRouteSensors.bt > 150) btCard.classList.add('warning');
+            else btCard.classList.remove('warning');
+            
+            startLiveFeed();
+        }
+
+        function startLiveFeed() {
+            stopLiveFeed();
+            document.getElementById('live-tag').classList.add('active');
+            updateSensorValues();
+            sensorInterval = setInterval(updateSensorValues, 800);
+        }
+
+        function updateSensorValues() {
+            if(!currentRouteSensors) return;
+            let bt;
+            if (currentRouteSensors.isPrivate) bt = currentRouteSensors.bt;
+            else bt = currentRouteSensors.bt + Math.floor(Math.random() * 10 - 5);
+            if (bt < 0) bt = 0;
+            
+            let audio = currentRouteSensors.audio + Math.floor(Math.random() * 5 - 2);
+            let speed;
+            if (currentRouteSensors.isZero) speed = 0; 
+            else {
+                speed = currentRouteSensors.speed + Math.floor(Math.random() * 7 - 3);
+                if (speed < 0) speed = 0;
+            }
+            
+            document.getElementById('val-bt').innerText = bt;
+            document.getElementById('val-audio').innerText = audio + "dB";
+            document.getElementById('val-motion').innerText = speed + " km/h";
+        }
+
+        function stopLiveFeed() {
+            if(sensorInterval) clearInterval(sensorInterval);
+            document.getElementById('live-tag').classList.remove('active');
+        }
+    </script>
+</body>
+</html>
+
+
